@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Friends Included Ltd finance system" />
+    <title>Friends Included | Finance</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div><span class="eyebrow">Friends Included Ltd</span><h1>Finance desk</h1></div>
+      <label class="role">Demonstration role <select id="actor"></select></label>
+    </header>
+    <main>
+      <p id="notice" class="notice">Loading records…</p>
+      <section class="intro"><p>Enter transactions, approve decisions, and check the results. The website and Telegram bot use the same processing rules.</p><button id="refresh" class="quiet">Refresh records</button></section>
+      <section id="setup" class="setup hidden"><h2>First-time setup</h2><p>Enter the server setup secret once to create the five fictional employees.</p><form id="setup-form"><input name="secret" type="password" placeholder="Setup secret" required /><button>Set up demonstration roster</button></form></section>
+      <section id="entry" class="grid two">
+        <article id="sale-panel" class="panel"><h2>New sale</h2><form id="sale-form">
+          <label>Reference<input name="reference" placeholder="S01" required /></label><label>Customer<input name="customer" required /></label>
+          <label>Project<select name="project"><option>A</option><option>B</option></select></label><label>Amount EUR<input name="amount" type="number" min="0.01" step="0.01" required /></label>
+          <label class="wide">Description<input name="description" required /></label><div class="wide split"><span>Proposed commission split</span><label>Richard %<input name="richard" type="number" min="0" max="100" step="0.01" required /></label><label>Anastasia %<input name="anastasia" type="number" min="0" max="100" step="0.01" required /></label><label>Jean-Claude %<input name="jean_claude" type="number" min="0" max="100" step="0.01" required /></label></div>
+          <button>Save sale</button></form></article>
+        <article id="expense-panel" class="panel"><h2>New expense</h2><form id="expense-form">
+          <label>Reference<input name="reference" placeholder="E01" required /></label><label>Amount EUR<input name="amount" type="number" min="0.01" step="0.01" required /></label>
+          <label>Category<select name="category"><option>Materials</option><option>Travel</option><option>Other</option></select></label><label>Proposed allocation<select name="proposed_allocation"><option>A</option><option>B</option><option>Company overhead</option></select></label>
+          <label class="wide">Description<input name="description" required /></label><button>Save expense</button></form></article>
+      </section>
+      <section id="dashboard-section" class="dashboard"><div class="section-heading"><div><span class="eyebrow">Live results</span><h2>Financial dashboard</h2></div><span id="counts" class="badge"></span></div><div id="metrics" class="metrics"></div><div class="grid two"><article class="panel"><h3>Project A</h3><div id="project-a"></div></article><article class="panel"><h3>Project B</h3><div id="project-b"></div></article></div><article class="panel"><h3>Commission earned</h3><div id="commissions" class="commission-list"></div></article></section>
+      <section id="manager" class="hidden"><div class="section-heading"><div><span class="eyebrow">Manager controls</span><h2>Approvals and corrections</h2></div></div><div id="pending" class="grid two"></div><article class="panel"><h3>Telegram account links</h3><p>Link a Telegram numeric user ID and optional chat ID to an employee. The bot uses the stored submission chat for later decision messages.</p><form id="link-form" class="link-form"><label>Employee<select name="employeeId" id="link-employee"></select></label><label>Telegram user ID<input name="telegramUserId" required /></label><label>Telegram chat ID<input name="telegramChatId" /></label><button>Save link</button></form></article></section>
+      <section><div class="section-heading"><div><span class="eyebrow">Source records</span><h2>Transactions</h2></div></div><div id="records" class="records"></div></section>
+      <section class="instructions panel"><h2>Telegram commands</h2><code>/sale S01|Olivia Rose|A|Description|1000|50|30|20</code><code>/expense E01|Description|Materials|120|A</code><p>Start a private chat with the bot first. Svetlana must link the Telegram user ID before a sender can submit.</p></section>
+    </main>
+    <template id="sale-approval"><article class="panel decision"><h3></h3><p class="details"></p><form><div class="split"><label>Richard %<input name="richard" type="number" min="0" max="100" step="0.01" required /></label><label>Anastasia %<input name="anastasia" type="number" min="0" max="100" step="0.01" required /></label><label>Jean-Claude %<input name="jean_claude" type="number" min="0" max="100" step="0.01" required /></label></div><button>Approve sale</button></form></article></template>
+    <template id="expense-approval"><article class="panel decision"><h3></h3><p class="details"></p><form><label>Final allocation<select name="allocation"><option>A</option><option>B</option><option>Company overhead</option></select></label><button>Confirm allocation</button></form></article></template>
+    <script src="/app.js"></script>
+  </body>
+</html>
