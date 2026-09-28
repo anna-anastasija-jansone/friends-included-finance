@@ -1,0 +1,12 @@
+{
+  "name": "friends-included-finance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Day 4 finance system for Friends Included Ltd",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
