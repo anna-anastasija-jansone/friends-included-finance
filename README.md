@@ -11,6 +11,8 @@ This is the Day 4 homework application for Friends Included Ltd. It is a small V
 - supports the five fictional demonstration roles, with permissions enforced by the API;
 - gives Svetlana a manager area for Telegram account links, commission approval, allocation decisions, and retries.
 
+The published page identifies **Anna Anastasija Jansone** and links directly to the Telegram bot, reviewer spreadsheet, and public GitHub repository.
+
 ## 1. Create Supabase
 
 1. Create a new Supabase project.
@@ -36,7 +38,7 @@ The application writes a header and then finds every row by reference. Approvals
 
 1. Create a bot with BotFather and start a private chat with it.
 2. Set its webhook to `https://YOUR-VERCEL-URL/api/telegram` and include Vercel's header secret (`X-Telegram-Bot-Api-Secret-Token`) with your `TELEGRAM_WEBHOOK_SECRET`.
-3. In the site, switch to Svetlana and use **Telegram account links** to connect each Telegram numeric user ID to a fictional employee.
+3. In the site, switch to Svetlana and use **Telegram account links** to connect each Telegram numeric user ID to a fictional employee. Saving an ID that is already linked moves it to the newly selected employee, so one tester can run S01 as Richard and E01 as Kevin without exposing IDs publicly.
 
 The bot accepts these commands:
 
