@@ -196,7 +196,7 @@ async function handleTelegram(req) {
     return { ok: true };
   }
   try {
-    const [command, rest] = message.text.trim().split(/\s+/, 2);
+    const text = message.text.trim(); const separator = text.search(/\s/); const command = separator === -1 ? text : text.slice(0, separator); const rest = separator === -1 ? "" : text.slice(separator).trim(); 
     const p = (rest || "").split("|").map((item) => item.trim()); let result;
     if (command === "/sale") { if (p.length !== 8) throw new Error("Use /sale REF|CUSTOMER|A-or-B|DESCRIPTION|AMOUNT|RICHARD%|ANASTASIA%|JEAN-CLAUDE%."); result = await completeSubmission("sale", await getActor(actor.id, "sale"), { reference: p[0], customer: p[1], project: p[2], description: p[3], amount: p[4], richard: p[5], anastasia: p[6], jean_claude: p[7] }, String(message.chat.id)); }
     else if (command === "/expense") { if (p.length !== 5) throw new Error("Use /expense REF|DESCRIPTION|CATEGORY|AMOUNT|A-B-or-Company overhead."); result = await completeSubmission("expense", await getActor(actor.id, "expense"), { reference: p[0], description: p[1], category: p[2], amount: p[3], proposed_allocation: p[4] }, String(message.chat.id)); }
