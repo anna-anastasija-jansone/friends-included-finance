@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 const money = (value) => new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(Number(value || 0));
 const fields = (form) => Object.fromEntries(new FormData(form));
 const actorId = () => $("#actor").value;
+const html = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
 
 function message(text, type = "") { const box = $("#notice"); box.textContent = text; box.className = `notice ${type}`; }
 async function api(path, options = {}) { const response = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...options }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Request failed."); return result; }
@@ -18,10 +19,11 @@ function renderDashboard(d) {
 }
 function statusClass(value) { return value?.startsWith("Synced") ? "synced" : "pending"; }
 function recordCard(kind, row) {
-  const primary = kind === "sale" ? `${row.customer} · Project ${row.project}` : `${row.category} · proposed ${row.proposed_allocation}`;
-  const status = `${row.status} · ${row.sync_status || "Sync pending"}`;
+  const primary = kind === "sale" ? `${html(row.customer)} · Project ${html(row.project)}` : `${html(row.category)} · proposed ${html(row.proposed_allocation)}`;
+  const status = `${html(row.status)} · ${html(row.sync_status || "Sync pending")}`;
+  const notification = row.decision_notification_status === "Failed" ? `<small class="notification-failed">Notification failed: ${html(row.decision_notification_error || "delivery failed")}</small>` : row.decision_notification_status === "Sent" ? "<small>Decision notification sent</small>" : "";
   const retry = actorId() === "svetlana" && (!row.sync_status?.startsWith("Synced") || row.decision_notification_status === "Failed") ? `<button class="retry" data-retry="${kind}" data-ref="${row.reference}" data-notification="${row.decision_notification_status === "Failed"}">Retry ${row.decision_notification_status === "Failed" ? "sync and notification" : "sync"}</button>` : "";
-  return `<article class="record"><div><strong>${row.reference}</strong><small>${kind === "sale" ? "Sale" : "Expense"}</small></div><div><span>${primary}</span><small>${row.description}</small><small>${status}</small></div><div><strong>${money(row.amount)}</strong><br>${retry}</div></article>`;
+  return `<article class="record"><div><strong>${html(row.reference)}</strong><small>${kind === "sale" ? "Sale" : "Expense"}</small></div><div><span>${primary}</span><small>${html(row.description)}</small><small>${status}</small>${notification}</div><div><strong>${money(row.amount)}</strong><br>${retry}</div></article>`;
 }
 function renderRecords(data) { $("#records").innerHTML = [...data.sales.map((row) => recordCard("sale", row)), ...data.expenses.map((row) => recordCard("expense", row))].join("") || "<p>No saved transactions yet.</p>"; }
 function renderManager(data) {
