@@ -40,3 +40,27 @@ test("reproduces the supplied cumulative Test 2 dashboard figures", () => {
   assert.equal(result.company.result, 3930);
   assert.deepEqual(result.people, { richard: 140, anastasia: 175, jean_claude: 215 });
 });
+
+test("keeps pending sales out of income and commission totals", () => {
+  const result = dashboard([
+    { reference: "S01", status: "Pending approval", amount: 1000, project: "A", commission_richard: 0, commission_anastasia: 0, commission_jean_claude: 0 }
+  ], []);
+  assert.equal(result.company.income, 0);
+  assert.equal(result.company.commissions, 0);
+  assert.equal(result.projects.A.result, 0);
+  assert.equal(result.pendingSales, 1);
+});
+
+test("deducts an awaiting expense from company once but not from either project", () => {
+  const expenses = [{ reference: "E07", status: "Awaiting allocation", amount: 140, final_allocation: null, proposed_allocation: "A" }];
+  const awaiting = dashboard([], expenses);
+  assert.equal(awaiting.company.result, -140);
+  assert.equal(awaiting.projects.A.result, 0);
+  assert.equal(awaiting.company.awaiting, 140);
+
+  const allocated = dashboard([], [{ ...expenses[0], status: "Allocated", final_allocation: "B" }]);
+  assert.equal(allocated.company.result, -140);
+  assert.equal(allocated.projects.A.result, 0);
+  assert.equal(allocated.projects.B.result, -140);
+  assert.equal(allocated.company.awaiting, 0);
+});
