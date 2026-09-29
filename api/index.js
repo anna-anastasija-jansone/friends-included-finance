@@ -10,6 +10,7 @@ const ROSTER = [
   { id: "jean_claude", name: "Jean-Claude Berzins", role: "sales" },
   { id: "kevin", name: "Kevin von Whatever", role: "expense_reporter" }
 ];
+const employeeName = (id) => ROSTER.find((employee) => employee.id === id)?.name || id;
 
 function config() {
   const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
@@ -104,9 +105,10 @@ async function googleToken() {
   return token.access_token;
 }
 
-function saleRow(s) { return [s.reference, s.submitted_at || new Date().toISOString(), s.submitted_by, s.customer, s.project, s.description, s.amount, s.proposed_richard, s.proposed_anastasia, s.proposed_jean_claude, s.approved_richard ?? "", s.approved_anastasia ?? "", s.approved_jean_claude ?? "", s.commission_richard || 0, s.commission_anastasia || 0, s.commission_jean_claude || 0, s.status]; }
-function expenseRow(e) { return [e.reference, e.submitted_at || new Date().toISOString(), e.submitted_by, e.description, e.category, e.amount, e.proposed_allocation, e.final_allocation || "", e.status]; }
-const HEADERS = { Sales: ["Reference", "Submission time", "Salesperson", "Customer", "Project", "Description", "Amount", "Proposed Richard %", "Proposed Anastasia %", "Proposed Jean-Claude %", "Approved Richard %", "Approved Anastasia %", "Approved Jean-Claude %", "Richard commission", "Anastasia commission", "Jean-Claude commission", "Status"], Expenses: ["Reference", "Submission time", "Reporter", "Description", "Category", "Amount", "Proposed allocation", "Final allocation", "Status"] };
+function notificationStatus(record) { return record.decision_notification_status === "Failed" ? `Failed: ${record.decision_notification_error || "delivery failed"}` : record.decision_notification_status || (record.status === "Approved" || record.status === "Allocated" ? "No recipient linked or not required" : "Pending manager decision"); }
+function saleRow(s) { return [s.reference, s.submitted_at || new Date().toISOString(), employeeName(s.submitted_by), s.customer, s.project, s.description, s.amount, s.proposed_richard, s.proposed_anastasia, s.proposed_jean_claude, s.approved_richard ?? "", s.approved_anastasia ?? "", s.approved_jean_claude ?? "", s.commission_richard || 0, s.commission_anastasia || 0, s.commission_jean_claude || 0, s.status, notificationStatus(s)]; }
+function expenseRow(e) { return [e.reference, e.submitted_at || new Date().toISOString(), employeeName(e.submitted_by), e.description, e.category, e.amount, e.proposed_allocation, e.final_allocation || "", e.status, notificationStatus(e)]; }
+const HEADERS = { Sales: ["Reference", "Submission time", "Salesperson", "Customer", "Project", "Description", "Amount", "Proposed Richard %", "Proposed Anastasia %", "Proposed Jean-Claude %", "Approved Richard %", "Approved Anastasia %", "Approved Jean-Claude %", "Richard commission", "Anastasia commission", "Jean-Claude commission", "Status", "Decision notification"], Expenses: ["Reference", "Submission time", "Reporter", "Description", "Category", "Amount", "Proposed allocation", "Final allocation", "Status", "Decision notification"] };
 
 async function sheetsFetch(path, options = {}) {
   if (!process.env.GOOGLE_SHEETS_ID) throw new Error("Google Sheets ID is not configured.");
@@ -121,7 +123,7 @@ async function syncSheet(kind, record) {
   const tab = kind === "sale" ? "Sales" : "Expenses";
   const row = kind === "sale" ? saleRow(record) : expenseRow(record);
   const values = (await sheetsFetch(`values/${encodeURIComponent(tab)}!A:Z`)).values || [];
-  if (!values.length) await sheetsFetch(`values/${encodeURIComponent(tab)}!A1:Z1?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: [HEADERS[tab]] }) });
+  await sheetsFetch(`values/${encodeURIComponent(tab)}!A1:Z1?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: [HEADERS[tab]] }) });
   const found = values.findIndex((cells, index) => index > 0 && cells[0] === record.reference);
   if (found > 0) await sheetsFetch(`values/${encodeURIComponent(tab)}!A${found + 1}:Z${found + 1}?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: [row] }) });
   else await sheetsFetch(`values/${encodeURIComponent(tab)}!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", body: JSON.stringify({ values: [row] }) });
@@ -157,7 +159,8 @@ async function approveSale(actorId, reference, split) {
   const approved = validateSplit(split);
   const commission = calculateCommissions(sale.amount, approved);
   const [record] = await patch("sales", reference, { approved_richard: approved.richard, approved_anastasia: approved.anastasia, approved_jean_claude: approved.jean_claude, commission_richard: commission.richard, commission_anastasia: commission.anastasia, commission_jean_claude: commission.jean_claude, status: "Approved", updated_at: new Date().toISOString() });
-  await syncRecord("sale", record); await notifyDecision("sale", record);
+  await notifyDecision("sale", record);
+  await syncRecord("sale", await one("sales", reference));
   return { record, message: "Sale approved." };
 }
 
@@ -168,8 +171,21 @@ async function allocateExpense(actorId, reference, allocation) {
   if (!expense) throw new Error("Expense not found.");
   if (expense.status === "Allocated") return { record: expense, message: "Already allocated; totals were unchanged." };
   const [record] = await patch("expenses", reference, { final_allocation: allocation, status: "Allocated", updated_at: new Date().toISOString() });
-  await syncRecord("expense", record); await notifyDecision("expense", record);
+  await notifyDecision("expense", record);
+  await syncRecord("expense", await one("expenses", reference));
   return { record, message: "Expense allocated." };
+}
+
+async function moveTelegramLink(employeeId, telegramUserId, telegramChatId) {
+  const userId = String(telegramUserId || "").trim();
+  const chatId = String(telegramChatId || "").trim();
+  if (!/^[0-9]+$/.test(userId)) throw new Error("Telegram user ID must contain digits only.");
+  if (chatId && !/^-?[0-9]+$/.test(chatId)) throw new Error("Telegram chat ID must be a numeric ID.");
+  const existingLinks = await getRows("employees", `telegram_user_id=eq.${encodeURIComponent(userId)}`);
+  for (const linked of existingLinks.filter((item) => item.id !== employeeId)) {
+    await db(`employees?id=eq.${encodeURIComponent(linked.id)}`, { method: "PATCH", body: JSON.stringify({ telegram_user_id: null, telegram_chat_id: null }) });
+  }
+  await db(`employees?id=eq.${encodeURIComponent(employeeId)}`, { method: "PATCH", body: JSON.stringify({ telegram_user_id: userId, telegram_chat_id: chatId || null }) });
 }
 
 async function completeSubmission(kind, actor, input, chatId) {
@@ -196,7 +212,14 @@ async function handleTelegram(req) {
     return { ok: true };
   }
   try {
-    const text = message.text.trim(); const separator = text.search(/\s/); const command = separator === -1 ? text : text.slice(0, separator); const rest = separator === -1 ? "" : text.slice(separator).trim(); 
+    const text = message.text.trim();
+    if (text.toLowerCase() === "/start") {
+      await telegram(message.chat.id, `Friends Included Finance is ready. You are linked as ${actor.name}. Your Telegram user ID is ${message.from.id}; chat ID is ${message.chat.id}. Use /sale or /expense according to this employee's role.`);
+      return { ok: true };
+    }
+    const separator = text.search(/\s/);
+    const command = separator === -1 ? text : text.slice(0, separator);
+    const rest = separator === -1 ? "" : text.slice(separator).trim();
     const p = (rest || "").split("|").map((item) => item.trim()); let result;
     if (command === "/sale") { if (p.length !== 8) throw new Error("Use /sale REF|CUSTOMER|A-or-B|DESCRIPTION|AMOUNT|RICHARD%|ANASTASIA%|JEAN-CLAUDE%."); result = await completeSubmission("sale", await getActor(actor.id, "sale"), { reference: p[0], customer: p[1], project: p[2], description: p[3], amount: p[4], richard: p[5], anastasia: p[6], jean_claude: p[7] }, String(message.chat.id)); }
     else if (command === "/expense") { if (p.length !== 5) throw new Error("Use /expense REF|DESCRIPTION|CATEGORY|AMOUNT|A-B-or-Company overhead."); result = await completeSubmission("expense", await getActor(actor.id, "expense"), { reference: p[0], description: p[1], category: p[2], amount: p[3], proposed_allocation: p[4] }, String(message.chat.id)); }
@@ -227,8 +250,8 @@ module.exports = async (req, res) => {
     if (path === "/expenses" && req.method === "POST") { const actor = await getActor(input.actorId, "expense"); return send(res, 201, await completeSubmission("expense", actor, input, null)); }
     if (path === "/sales/approve" && req.method === "POST") return send(res, 200, await approveSale(input.actorId, input.reference, input));
     if (path === "/expenses/allocate" && req.method === "POST") return send(res, 200, await allocateExpense(input.actorId, input.reference, input.allocation));
-    if (path === "/retry" && req.method === "POST") { await getActor(input.actorId, "manager"); const table = input.kind === "sale" ? "sales" : "expenses"; const record = await one(table, input.reference); if (!record) throw new Error("Record not found."); const sync = await syncRecord(input.kind, record); const notification = input.retryNotification ? await notifyDecision(input.kind, record) : null; return send(res, 200, { message: `${sync}${notification ? `; notification ${notification}` : ""}` }); }
-    if (path === "/employees/link" && req.method === "POST") { await getActor(input.actorId, "manager"); const employee = await employeeById(input.employeeId); if (!employee) throw new Error("Employee not found."); await db(`employees?id=eq.${encodeURIComponent(input.employeeId)}`, { method: "PATCH", body: JSON.stringify({ telegram_user_id: String(input.telegramUserId), telegram_chat_id: input.telegramChatId ? String(input.telegramChatId) : null }) }); return send(res, 200, { message: "Telegram account link saved." }); }
+    if (path === "/retry" && req.method === "POST") { await getActor(input.actorId, "manager"); const table = input.kind === "sale" ? "sales" : "expenses"; let record = await one(table, input.reference); if (!record) throw new Error("Record not found."); const notification = input.retryNotification ? await notifyDecision(input.kind, record) : null; record = await one(table, input.reference); const sync = await syncRecord(input.kind, record); return send(res, 200, { message: `${sync}${notification ? `; notification ${notification}` : ""}` }); }
+    if (path === "/employees/link" && req.method === "POST") { await getActor(input.actorId, "manager"); const employee = await employeeById(input.employeeId); if (!employee) throw new Error("Employee not found."); await moveTelegramLink(input.employeeId, input.telegramUserId, input.telegramChatId); return send(res, 200, { message: `Telegram account is now linked to ${employee.name}.` }); }
     return send(res, 404, { error: "Route not found." });
   } catch (error) { return send(res, 400, { error: error.message || "Request failed." }); }
 };
